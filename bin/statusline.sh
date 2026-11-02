@@ -127,7 +127,7 @@ file_age() {
 # ── Extract JSON data (single jq call) ─────────────────
 US=$'\x1f'
 IFS="$US" read -r model_name size input_tokens cache_create cache_read ctx_used_pct \
-    cwd session_start duration_ms effort five_hour_pct_raw five_hour_reset_raw \
+    cwd effort five_hour_pct_raw five_hour_reset_raw \
     seven_day_pct_raw seven_day_reset_raw cc_version <<< "$(echo "$input" | jq -r '[
         (.model.display_name // "Claude"),
         (.context_window.context_window_size // 0),
@@ -136,8 +136,6 @@ IFS="$US" read -r model_name size input_tokens cache_create cache_read ctx_used_
         (.context_window.current_usage.cache_read_input_tokens // 0),
         (.context_window.used_percentage // ""),
         (.cwd // .workspace.current_dir // ""),
-        (.session.start_time // ""),
-        (.cost.total_duration_ms // ""),
         (.effort.level // ""),
         (.rate_limits.five_hour.used_percentage // ""),
         (.rate_limits.five_hour.resets_at // ""),
@@ -164,7 +162,7 @@ if [ -z "$effort" ]; then
     [ -z "$effort" ] && effort="default"
 fi
 
-# ── LINE 1: Model │ Context % │ Directory (branch) │ Session │ Effort ──
+# ── LINE 1: Model │ Context % │ Directory (branch) │ Effort ──
 pct_color=$(color_for_pct "$pct_used")
 [ -z "$cwd" ] && cwd=$(pwd)
 dirname=$(basename "$cwd")
@@ -175,25 +173,6 @@ if git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git_branch=$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null)
     if [ -n "$(git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null)" ]; then
         git_dirty="*"
-    fi
-fi
-
-session_duration=""
-elapsed=""
-if [ -n "$session_start" ]; then
-    start_epoch=$(iso_to_epoch "$session_start")
-    [ -n "$start_epoch" ] && elapsed=$(( $(date +%s) - start_epoch ))
-fi
-if [ -z "$elapsed" ] && [ -n "$duration_ms" ]; then
-    elapsed=$(awk -v ms="$duration_ms" 'BEGIN { printf "%d", ms / 1000 }')
-fi
-if [ -n "$elapsed" ]; then
-    if [ "$elapsed" -ge 3600 ]; then
-        session_duration="$(( elapsed / 3600 ))h$(( (elapsed % 3600) / 60 ))m"
-    elif [ "$elapsed" -ge 60 ]; then
-        session_duration="$(( elapsed / 60 ))m"
-    else
-        session_duration="${elapsed}s"
     fi
 fi
 
@@ -210,10 +189,6 @@ line1+="${sep}"
 line1+="${skip_perms}${cyan}${dirname}${reset}"
 if [ -n "$git_branch" ]; then
     line1+=" ${green}(${git_branch}${red}${git_dirty}${green})${reset}"
-fi
-if [ -n "$session_duration" ]; then
-    line1+="${sep}"
-    line1+="${dim}⏱ ${reset}${white}${session_duration}${reset}"
 fi
 line1+="${sep}"
 case "$effort" in
